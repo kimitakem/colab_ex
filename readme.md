@@ -1,2 +1,3 @@
 # Sample
-- これはテストです
+## ipython notebookの起動
+- スクリプトをRunする
