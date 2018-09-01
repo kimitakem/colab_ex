@@ -16,6 +16,7 @@ from official.mnist import mnist
 from official.utils.flags import core as flags_core
 from official.utils.misc import model_helpers
 
+# Eager Modeに変更する
 tf.enable_eager_execution()
 tfe = tf.contrib.eager
 
