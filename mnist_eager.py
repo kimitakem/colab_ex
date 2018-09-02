@@ -4,6 +4,7 @@
 
 import os
 import time
+import sys
 
 # pylint: disable=g-bad-import-order
 from absl import app as absl_app
@@ -37,10 +38,20 @@ def loss(logits, labels):
     )
 
 
-n_epoch = 2
+def test(model, dataset):
+    avg_loss = tfe.metrics.Mean('loss', dtype=tf.float32)
+    for (images, labels) in test_ds:
+        logits = model(images, training=False)
+        avg_loss(loss(logits, labels))
+
+    print("Test Loss: {}".format(avg_loss.result()))
+
+
+n_epoch = 10
 for e in range(n_epoch):
+
     for (batch, (images, labels)) in enumerate(train_ds):
-        print(batch)
+        print('\r{}'.format(batch * 128), end="")
         with tf.GradientTape() as tape:
             logits = model(images, training=True)
             loss_value = loss(logits, labels)
@@ -49,8 +60,12 @@ for e in range(n_epoch):
             zip(grads, model.variables)
         )
 
-    import ipdb
-    ipdb.set_trace()
+        if (batch + 1) % 10 == 0:
+            test(model, test_ds)
+
+
+
+
 
 
 
