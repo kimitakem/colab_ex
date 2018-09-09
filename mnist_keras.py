@@ -11,12 +11,12 @@ from tensorflow.data import Dataset
 import time
 
 # Parameters
-batch_size = 32
+batch_size = 128
 num_classes = 10
-epochs = 3
+epochs = 10
 img_rows, img_cols = 28, 28
-num_training = 1000
-num_test = 100
+num_training = 60000  # 60000 for full
+num_test = 10000  # 10000 for full
 
 # Load Original Dataset
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
@@ -41,7 +41,8 @@ x_test /= 255
 
 
 # Convert to Dataset
-dataset_train = Dataset.from_tensor_slices((x_train, y_train)).shuffle(num_training, seed=1).batch(batch_size).repeat()
+# dataset_train = Dataset.from_tensor_slices((x_train, y_train)).shuffle(num_training, seed=1).batch(batch_size).repeat()
+dataset_train = Dataset.from_tensor_slices((x_train, y_train)).batch(batch_size).repeat()
 dataset_test = Dataset.from_tensor_slices((x_test, y_test)).batch(batch_size).repeat()
 
 
