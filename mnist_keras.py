@@ -10,6 +10,8 @@ from tensorflow.data import Dataset
 
 import time
 
+tf.enable_eager_execution()
+
 # Parameters
 batch_size = 128
 num_classes = 10
@@ -61,6 +63,10 @@ def create_model():
     return model
 
 
+def print_eager_separater():
+    print("\n====Eager Mode====")
+
+
 def print_keras_separater():
     print("\n====Keras====")
 
@@ -69,10 +75,34 @@ def print_dataset_separater():
     print("\n====Keras_with_tf.data====")
 
 
+print_eager_separater()
+eager_model = create_model()
+optimizer = tf.train.AdamOptimizer()
+steps_per_epoch = len(x_train) // batch_size
+
+for e in range(epochs):
+    print("Epoch {}/{}".format(e, epochs))
+    for (batch, (images, labels)) in enumerate(dataset_train):
+
+        with tf.GradientTape() as tape:
+            logits = eager_model(images, training=True)
+            loss_value = tf.reduce_mean(
+                tf.nn.softmax_cross_entropy_with_logits_v2(
+                    logits=logits, labels=labels
+                ))
+            grads = tape.gradient(loss_value, eager_model.variables)
+            optimizer.apply_gradients(zip(grads, eager_model.variables))
+            print('\r{}/{} Loss:{}'.format(batch * batch_size,
+                                           len(x_train),
+                                           loss_value.numpy()), end="")
+
+        if (batch + 1) % steps_per_epoch == 0:
+            break
+
 print_dataset_separater()
 data_model = create_model()
 data_model.compile(loss=keras.losses.categorical_crossentropy,
-                   optimizer=keras.optimizers.Adadelta(),
+                   optimizer=optimizer,
                    metrics=['accuracy'])
 
 start = time.time()
@@ -93,7 +123,7 @@ print('Test accuracy:', data_score[1])
 print_keras_separater()
 keras_model = create_model()
 keras_model.compile(loss=keras.losses.categorical_crossentropy,
-              optimizer=keras.optimizers.Adadelta(),
+              optimizer=optimizer,
               metrics=['accuracy'])
 
 start = time.time()
