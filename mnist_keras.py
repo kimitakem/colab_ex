@@ -101,6 +101,7 @@ for e in range(epochs):
                                                         loss_value.numpy()), end="")
 
         if (batch + 1) % steps_per_epoch == 0:
+            print("\n")
             break
 
 print_dataset_separater()
