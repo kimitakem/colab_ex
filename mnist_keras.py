@@ -1,6 +1,4 @@
 import tensorflow as tf
-# tf.enable_eager_execution()
-
 import tensorflow.keras as keras
 from tensorflow.keras.datasets import mnist
 from tensorflow.keras.models import Sequential
@@ -10,6 +8,8 @@ from tensorflow.keras import backend as K
 from tensorflow.data import Dataset
 
 import time
+
+# tf.enable_eager_execution()
 
 # Parameters
 batch_size = 128
@@ -58,6 +58,7 @@ def create_model():
     model.add(Flatten())
     model.add(Dense(128, activation='relu'))
     model.add(Dropout(0.5))
+#    model.add(Dense(num_classes, activation='softmax'))
     model.add(Dense(num_classes, activation='softmax'))
     return model
 
@@ -80,20 +81,24 @@ optimizer = tf.train.AdamOptimizer()
 steps_per_epoch = len(x_train) // batch_size
 
 for e in range(epochs):
-    print("Epoch {}/{}".format(e, epochs))
     for (batch, (images, labels)) in enumerate(dataset_train):
 
         with tf.GradientTape() as tape:
             logits = eager_model(images, training=True)
-            loss_value = tf.reduce_mean(
-                tf.nn.softmax_cross_entropy_with_logits_v2(
-                    logits=logits, labels=labels
-                ))
+            # loss_value = tf.reduce_mean(
+            #     tf.nn.softmax_cross_entropy_with_logits_v2(
+            #         logits=logits, labels=labels
+            #     ))
+            # loss_value = tf.losses.softmax_cross_entropy(labels, logits)
+            loss_value = tf.reduce_mean(tf.keras.losses.categorical_crossentropy(labels, logits))
+
             grads = tape.gradient(loss_value, eager_model.variables)
             optimizer.apply_gradients(zip(grads, eager_model.variables))
-            print('\r{}/{} Loss:{}'.format(batch * batch_size,
-                                           len(x_train),
-                                           loss_value.numpy()), end="")
+            print('\rEpoch {}/{}: {}/{} Loss:{}'.format(e + 1,
+                                                        epochs,
+                                                        batch * batch_size,
+                                                        len(x_train),
+                                                        loss_value.numpy()), end="")
 
         if (batch + 1) % steps_per_epoch == 0:
             break
