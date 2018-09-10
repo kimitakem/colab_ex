@@ -1,6 +1,6 @@
 import tensorflow.keras as keras
 import tensorflow as tf
-tf.enable_eager_execution()
+# tf.enable_eager_execution()
 
 from tensorflow.keras.datasets import mnist
 from tensorflow.keras.models import Sequential

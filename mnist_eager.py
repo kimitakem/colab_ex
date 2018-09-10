@@ -23,6 +23,10 @@ tfe = tf.contrib.eager
 
 train_ds = mnist_dataset.train(".").shuffle(60000).batch(128)
 test_ds = mnist_dataset.train(".").batch(128)
+
+import ipdb
+ipdb.set_trace()
+
 model = mnist.create_model('channels_last')
 optimizer = tf.train.MomentumOptimizer(0.01, 0.01)
 
@@ -49,16 +53,15 @@ def test(model, dataset):
 
 n_epoch = 10
 for e in range(n_epoch):
-
     for (batch, (images, labels)) in enumerate(train_ds):
+        import ipdb
+        ipdb.set_trace()
         print('\r{}'.format(batch * 128), end="")
         with tf.GradientTape() as tape:
             logits = model(images, training=True)
             loss_value = loss(logits, labels)
         grads = tape.gradient(loss_value, model.variables)
-        optimizer.apply_gradients(
-            zip(grads, model.variables)
-        )
+        optimizer.apply_gradients(zip(grads, model.variables))
 
         if (batch + 1) % 10 == 0:
             test(model, test_ds)
