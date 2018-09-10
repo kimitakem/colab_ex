@@ -1,5 +1,6 @@
 import tensorflow.keras as keras
 import tensorflow as tf
+tf.enable_eager_execution()
 
 from tensorflow.keras.datasets import mnist
 from tensorflow.keras.models import Sequential
@@ -9,8 +10,6 @@ from tensorflow.keras import backend as K
 from tensorflow.data import Dataset
 
 import time
-
-tf.enable_eager_execution()
 
 # Parameters
 batch_size = 128
