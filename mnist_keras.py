@@ -1,7 +1,7 @@
-import tensorflow.keras as keras
 import tensorflow as tf
-# tf.enable_eager_execution()
+tf.enable_eager_execution()
 
+import tensorflow.keras as keras
 from tensorflow.keras.datasets import mnist
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout, Flatten
