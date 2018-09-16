@@ -58,7 +58,6 @@ def create_model():
     model.add(Flatten())
     model.add(Dense(128, activation='relu'))
     model.add(Dropout(0.5))
-#    model.add(Dense(num_classes, activation='softmax'))
     model.add(Dense(num_classes, activation='softmax'))
     return model
 
@@ -78,20 +77,17 @@ def print_dataset_separater():
 print_eager_separater()
 eager_model = create_model()
 optimizer = tf.train.AdamOptimizer()
-steps_per_epoch = len(x_train) // batch_size
+steps_per_epoch = (len(x_train) - 1) // batch_size + 1
+validation_steps = (len(x_test) - 1) // batch_size + 1
+
+tfe = tf.contrib.eager
 
 for e in range(epochs):
     for (batch, (images, labels)) in enumerate(dataset_train):
 
         with tf.GradientTape() as tape:
             logits = eager_model(images, training=True)
-            # loss_value = tf.reduce_mean(
-            #     tf.nn.softmax_cross_entropy_with_logits_v2(
-            #         logits=logits, labels=labels
-            #     ))
-            # loss_value = tf.losses.softmax_cross_entropy(labels, logits)
-            loss_value = tf.reduce_mean(tf.keras.losses.categorical_crossentropy(labels, logits))
-
+            loss_value = tf.losses.softmax_cross_entropy(labels, logits)
             grads = tape.gradient(loss_value, eager_model.variables)
             optimizer.apply_gradients(zip(grads, eager_model.variables))
             print('\rEpoch {}/{}: {}/{} Loss:{}'.format(e + 1,
@@ -101,7 +97,21 @@ for e in range(epochs):
                                                         loss_value.numpy()), end="")
 
         if (batch + 1) % steps_per_epoch == 0:
-            print("\n")
+            avg_loss = tfe.metrics.Mean('loss', dtype=tf.float32)
+            accuracy = tfe.metrics.Accuracy('accuracy', dtype=tf.float32)
+            for (val_batch, (val_images, val_labels)) in enumerate(dataset_test):
+                predicted_logits = eager_model(val_images, training=False)
+                val_loss_value = tf.losses.softmax_cross_entropy(val_labels, predicted_logits)
+
+                avg_loss(val_loss_value)
+                accuracy(
+                    tf.argmax(val_labels, axis=1, output_type=tf.int64),  # ground truth labels
+                    tf.argmax(predicted_logits, axis=1, output_type=tf.int64)  # predicted labels
+                )
+                if (val_batch + 1) % validation_steps == 0:
+                    break
+
+            print("\nValidation Loss: {}, Acc: {}".format(avg_loss.result(), accuracy.result()))
             break
 
 print_dataset_separater()
