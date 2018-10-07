@@ -32,7 +32,7 @@ def get_optimizer():
     return tf.train.GradientDescentOptimizer(learning_rate=0.01)
 
 batch_size = 32
-num_epochs = 500
+num_epochs = 1000
 
 
 #############################################
