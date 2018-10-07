@@ -32,7 +32,7 @@ def get_optimizer():
     return tf.train.GradientDescentOptimizer(learning_rate=0.01)
 
 batch_size = 32
-num_epochs = 1000
+num_epochs = 500
 
 
 #############################################
@@ -132,7 +132,7 @@ plt.plot(x, keras_hist.history['acc'], label="keras_acc")
 plt.plot(x, val_accuracy_results, label="eager_val_acc")
 plt.plot(x, keras_hist.history['val_acc'], label="keras_val_acc")
 plt.title("accuracy")
-plt.legend(loc='bottom right')
+plt.legend(loc='best')
 plt.show()
 
 plt.plot(x, train_loss_results, label="eager_loss")
@@ -140,29 +140,30 @@ plt.plot(x, keras_hist.history['loss'], label="keras_loss")
 plt.plot(x, val_loss_results, label="eager_val_loss")
 plt.plot(x, keras_hist.history['val_loss'], label="keras_loss")
 plt.title("loss")
-plt.legend(loc='top right')
+plt.legend(loc='best')
 plt.show()
 
 
-import ipdb
-ipdb.set_trace()
 ######################################
+val_loss_difference = []
+loss_difference = []
 for i in range(20):
     keras_hist = keras_training()
-    train_loss_results, train_accuracy_results = eager_training()
-    loss_difference = np.array(train_loss_results) - np.array(keras_hist.history['loss'])
-    plt.plot(x, loss_difference, label="Eager-Keras")
+    train_loss_results, train_accuracy_results, val_loss_results, val_accuracy_results = eager_training()
+    loss_difference.append(np.array(train_loss_results) - np.array(keras_hist.history['loss']))
+    val_loss_difference.append(np.array(val_loss_results) - np.array(keras_hist.history['val_loss']))
 
-plt.title("Loss Difference")
-plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+
+for item in loss_difference:
+    plt.plot(item)
+
+plt.title("Loss Difference(Eager - Keras)")
 plt.show()
 
+for item in val_loss_difference:
+    plt.plot(item)
 
-
-loss_difference = np.array(train_loss_results) - np.array(keras_hist.history['loss'])
-plt.plot(x, loss_difference, label="Eager-Keras")
-plt.title("Loss Difference")
-plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+plt.title("Val Loss Difference(Eager - Keras)")
 plt.show()
 
 import ipdb
