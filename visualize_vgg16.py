@@ -30,6 +30,50 @@ class_idx = np.argmax(predictions[0])
 class_output = model.output[:, class_idx]
 print("class_output", class_output)
 
+model.compile(loss='categorical_crossentropy', optimizer='adam')
+input_tensors = [model.input, # placeholder for input image tensor
+                 K.learning_phase(), # placeholder for mode (train or test) tense
+                 ]
+
+gradients = model.optimizer.get_gradients(model.output[0][class_idx], model.input)
+compute_gradients = K.function(inputs=input_tensors, outputs=gradients)
+
+gradients = compute_gradients([preprocessed_input, 0])[0][0]
+
+image = np.sum(np.abs(gradients), axis=2)
+
+vmax = np.percentile(image, 99)
+vmin = np.min(image)
+
+# plt.imshow(image, cmap='gray', vmin=vmin, vmax=vmax)
+# plt.show()
+
+stdev_spread = 1.0
+nsamples = 5  # originally 50
+stdev = stdev_spread * (np.max(preprocessed_input) - np.min(preprocessed_input))
+
+total_gradients = np.zeros_like(preprocessed_input)
+for i in range(nsamples):
+    print(i)
+    noise = np.random.normal(0, stdev, preprocessed_input.shape)
+    x_value_plus_noise = preprocessed_input + noise
+
+    gradients = compute_gradients([preprocessed_input, 0])[0][0]
+    total_gradients += gradients
+
+smooth_grad = total_gradients[0] / nsamples
+
+image = np.sum(np.abs(smooth_grad), axis=2)
+
+vmax = np.percentile(image, 99)
+vmin = np.min(image)
+
+plt.imshow(image, cmap='gray', vmin=vmin, vmax=vmax)
+plt.show()
+
+import pdb
+pdb.set_trace()
+
 # 可視化1: 勾配
 input_grad = K.gradients(class_output, model.input)[0]  # クラス出力に対する入力の勾配
 input_grad_func = K.function([model.input], [input_grad])  # 勾配を算出する関数
