@@ -29,6 +29,54 @@ class_idx = np.argmax(predictions[0])
 class_output = model.output[:, class_idx]
 print("class_output", class_output)
 
+# Guided Backprop:
+import tensorflow as tf
+
+@tf.RegisterGradient("GuidedRelu")
+def _GuidedReluGrad(op, grad):
+    gate_g = tf.cast(grad > 0, "float32")
+    gate_y = tf.cast(op.outputs[0] > 0, "float32")
+    return gate_y * gate_g * grad
+
+model_temp_path = "temp_orig.h5"
+model.save(model_temp_path)
+
+from tensorflow.keras.models import load_model
+import tensorflow as tf
+
+with tf.Graph().as_default():
+    with tf.Session().as_default():
+        K.set_learning_phase(0)
+        load_model(model_temp_path)
+        session = K.get_session()
+        tf.train.export_meta_graph()
+        saver = tf.train.Saver()
+        saver.save(session, 'C:\\Users\\kimim\\PycharmProjects\\colab_ex\\guided_backprop_ckpt')
+
+guided_graph = tf.Graph()
+with guided_graph.as_default():
+    guided_sess = tf.Session(graph=guided_graph)
+    with guided_graph.gradient_override_map({'Relu': 'GuidedRelu'}):
+        saver = tf.train.import_meta_graph('C:\\Users\\kimim\\PycharmProjects\\colab_ex\\guided_backprop_ckpt.meta')
+        saver.restore(guided_sess, 'C:\\Users\\kimim\\PycharmProjects\\colab_ex\\guided_backprop_ckpt')
+
+        imported_y = guided_graph.get_tensor_by_name(model.output.name)[0][class_idx]
+        imported_x = guided_graph.get_tensor_by_name(model.input.name)
+
+        guided_grads_node = tf.gradients(imported_y, imported_x)
+
+    guided_feed_dict = {}
+    guided_feed_dict[imported_x] = preprocessed_input
+
+    gradients = guided_sess.run(guided_grads_node, feed_dict=guided_feed_dict)[0][0]
+
+    grad_map = np.maximum(gradients, 0.)
+    grad_map = grad_map / grad_map.max()
+
+    plt.imshow(grad_map)
+    plt.show()
+
+
 # 可視化1: 勾配
 input_grad = K.gradients(class_output, model.input)[0]  # クラス出力に対する入力の勾配
 input_grad_func = K.function([model.input], [input_grad])  # 勾配を算出する関数
