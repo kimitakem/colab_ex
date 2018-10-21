@@ -1,33 +1,74 @@
-from tensorflow.keras.applications.vgg16 import VGG16, preprocess_input, decode_predictions
-from tensorflow.keras.preprocessing import image
+# 1.画像の読み込み
 import numpy as np
-import tensorflow.keras.backend as K
-import sys
-import cv2
-import matplotlib.pyplot as plt
-
-# 画像の読み込み
+from tensorflow.keras.preprocessing import image
 filename = "images//dog2.jpeg"
 img = image.load_img(filename, target_size=(224, 224))
-x_orig = image.img_to_array(img)
-array_img = np.asanyarray(img)
-x = np.expand_dims(x_orig, axis=0)
-x = x.astype('float32')
-preprocessed_input = preprocess_input(x)
+x_orig = image.img_to_array(img)  # ndarray: (224, 224, 3), float32
+x = np.expand_dims(x_orig, axis=0)  # ndarray: (1, 224, 224, 3), float32
 
-# モデルの読み込み
+# 2. モデルの読み込み
+from tensorflow.keras.applications.vgg16 import VGG16
 model = VGG16()
 print(model.summary())
 
-# 推論を行う
-predictions = model.predict(preprocessed_input)
-results = decode_predictions(predictions, top=5)[0]
+# 3. 推論を行い、結果を取得する
+from tensorflow.keras.applications.vgg16 import preprocess_input
+x_processed = preprocess_input(x)  # ndarray: (1, 224, 224, 3), float32
+y_pred = model.predict(x_processed)  # ndarray: (1, 1000), float32
+
+# 4. 推論結果の解釈
+from tensorflow.keras.applications.vgg16 import decode_predictions
+results = decode_predictions(y_pred, top=5)[0]  # (クラス名, クラス表記, スコア)のリスト
 for result in results:
     print(result)
+class_idx = np.argmax(y_pred[0])
 
-class_idx = np.argmax(predictions[0])
-class_output = model.output[:, class_idx]
-print("class_output", class_output)
+
+# 5. 入力画像に対する単純な勾配を可視化する
+import tensorflow.keras.backend as K
+import matplotlib.pyplot as plt
+class_output = model.output[:, class_idx]  # class出力 / Tensor
+grad_tensor = K.gradients(class_output, model.input)[0]  # class出力に対する入力の勾配 / Tensor
+grad_func = K.function([model.input], [grad_tensor])  # 勾配を算出する関数を定義 /  Function
+gradient = grad_func([x_processed])[0][0]  # 勾配の値を算出 / ndarray: (224, 224, 3), float32
+
+
+def naive_color_mapping(grad_array):
+    grad_map = np.maximum(grad_array, 0.) / grad_array.max()  # 正の勾配を算出し正規化 / ndarray: (224, 224, 3) , float32
+    plt.imshow(grad_map)
+    plt.show()
+
+
+def naive_mono_mapping(grad_array):
+    grad_mono_map = np.sum(np.abs(grad_array), axis=2)
+    vmax = np.percentile(grad_array, 99)
+    vmin = np.min(grad_mono_map)
+
+    plt.imshow(grad_mono_map, cmap='gray', vmin=vmin, vmax=vmax)
+    plt.show()
+
+
+naive_mono_mapping(gradient)
+
+
+# 6. SmoothGradで勾配を可視化
+stdev_spread = 1.0
+n_samples = 5  # originally 50
+stdev = stdev_spread * (np.max(x_processed) - np.min(x_processed))
+total_gradient = np.zeros_like(x_processed)  # 0で初期化
+for i in range(n_samples):
+    print("SmoothGrad: {}/{}".format(i+1, n_samples))
+    x_plus_noise = x_processed \
+        + np.random.normal(0, stdev, x_processed.shape)  # xにノイズを付加 / ndarray: (1, 224, 224, 3), float32
+    total_gradient += grad_func([x_processed])[0]  # サンプルに対する勾配を算出して合計する / ndarray: (1, 224, 224, 3), float32
+
+smooth_grad = total_gradient[0] / n_samples  # 平均の勾配を算出 / ndarray: (224, 224, 3), float32
+
+naive_mono_mapping(smooth_grad)
+
+
+import pdb
+pdb.set_trace()
 
 # Guided Backprop:
 import tensorflow as tf
@@ -66,55 +107,24 @@ with guided_graph.as_default():
         guided_grads_node = tf.gradients(imported_y, imported_x)
 
     guided_feed_dict = {}
-    guided_feed_dict[imported_x] = preprocessed_input
+    guided_feed_dict[imported_x] = x_processed
 
-    gradients = guided_sess.run(guided_grads_node, feed_dict=guided_feed_dict)[0][0]
+    sample_gradient = guided_sess.run(guided_grads_node, feed_dict=guided_feed_dict)[0][0]
 
-    grad_map = np.maximum(gradients, 0.)
+    grad_map = np.maximum(sample_gradient, 0.)
     grad_map = grad_map / grad_map.max()
 
     plt.imshow(grad_map)
     plt.show()
 
 
-# 可視化1: 勾配
-input_grad = K.gradients(class_output, model.input)[0]  # クラス出力に対する入力の勾配
-input_grad_func = K.function([model.input], [input_grad])  # 勾配を算出する関数
-input_grad_val = input_grad_func([preprocessed_input])[0]  # 入力に対して勾配を算出
-grad_map = np.maximum(input_grad_val[0], 0.)  # 勾配が正のところだけを切り出し
-grad_map = grad_map / grad_map.max()  # 正規化して[0, 1] にする
-
-#plt.imshow(grad_map)
-#plt.show()
-
-# 可視化2: SmoothGrad
-stdev_spread = 1.0
-nsamples = 5  # originally 50
-stdev = stdev_spread * (np.max(preprocessed_input) - np.min(preprocessed_input))
-total_gradients = np.zeros_like(preprocessed_input)  # 0で初期化
-for i in range(nsamples):
-    print(i)
-    noise = np.random.normal(0, stdev, preprocessed_input.shape)
-    x_value_plus_noise = preprocessed_input + noise
-
-    gradients = input_grad_func([preprocessed_input])[0]
-    total_gradients += gradients
-
-smooth_grad = total_gradients[0] / nsamples
-image = np.sum(np.abs(smooth_grad), axis=2)
-
-vmax = np.percentile(image, 99)
-vmin = np.min(image)
-
-plt.imshow(image, cmap='gray', vmin=vmin, vmax=vmax)
-plt.show()
 
 # 可視化3: Grad CAM
 conv_output = model.get_layer("block5_conv3").output
 grads = K.gradients(class_output, conv_output)[0]
 gradient_function = K.function([model.input], [conv_output, grads])
 
-output, grads_val = gradient_function([preprocessed_input])
+output, grads_val = gradient_function([x_processed])
 output, grads_val = output[0], grads_val[0]
 
 weights = np.mean(grads_val, axis=(0,1))
