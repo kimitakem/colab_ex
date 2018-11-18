@@ -23,31 +23,25 @@ for result in results:
     print(result)
 ranking = y_pred[0].argsort()[::-1]
 class_idx = ranking[0]
-
-# 5. 入力画像に対する単純な勾配を可視化する
-import tensorflow.keras.backend as K
-import matplotlib.pyplot as plt
-class_output = model.output[:, class_idx]  # Tensor / クラススコア
-grad_tensor = K.gradients(class_output, model.input)[0]  # Tensor / クラススコアに対する入力の勾配
-grad_func = K.function([model.input], [grad_tensor])  # Function / 勾配の値を算出するための関数
-gradient = grad_func([x_processed])[0][0]  # ndarray: (224, 224, 3), float32 / 算出された勾配の値
+値
 
 
+# 可視化のための関数の準備
 def visualize_mono_map(map_array, base_image=None, output_path=None):
     if map_array.ndim == 3:
-        mono_map = np.sum(np.abs(map_array), axis=2)
+        mono_map = np.sum(np.abs(map_array), axis=2)  # マップがカラーだった場合はモノクロに変換する。
     else:
         mono_map = map_array
 
     minimum_value = mono_map.min()
     maximum_value = np.percentile(mono_map, 90)
-    normalized_map = (np.minimum(mono_map, maximum_value) - minimum_value) / (maximum_value - minimum_value)
+    normalized_map = (np.minimum(mono_map, maximum_value) - minimum_value) / (maximum_value - minimum_value)  # マップを正規化する
 
     if base_image is None:
         plt.imshow(normalized_map, cmap='jet')
 
     else:
-        image_norm = (base_image - base_image.min()) / (base_image.max() - base_image.min())
+        image_norm = (base_image - base_image.min()) / (base_image.max() - base_image.min())  # 背景画像の正規化
         overlay = np.stack([normalized_map * image_norm[:,:,i] for i in range(3)], axis=2)
         plt.imshow(overlay)
 
@@ -63,6 +57,13 @@ def naive_color_mapping(map_array):
     plt.show()
 
 
+# 5. 入力画像に対する単純な勾配を可視化する
+import tensorflow.keras.backend as K
+import matplotlib.pyplot as plt
+class_output = model.output[:, class_idx]  # Tensor / クラススコア
+grad_tensor = K.gradients(class_output, model.input)[0]  # Tensor / クラススコアに対する入力の勾配
+grad_func = K.function([model.input], [grad_tensor])  # Function / 勾配の値を算出するための関数
+gradient = grad_func([x_processed])[0][0]  # ndarray: (224, 224, 3), float32 / 算出された勾配の
 visualize_mono_map(gradient, base_image=None, output_path="grad_images/naive_grad.png")
 visualize_mono_map(gradient, base_image=x_orig, output_path="grad_images/naive_grad_bg.png")
 
