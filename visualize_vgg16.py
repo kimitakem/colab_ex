@@ -6,7 +6,8 @@ print(model.summary())
 # 2.画像の読み込み
 import numpy as np
 from tensorflow.keras.preprocessing import image
-filename = "images//fluit2.jpg"
+image_name = "fruit"
+filename = "images//{}.jpg".format(image_name)
 img = image.load_img(filename, target_size=(224, 224))
 x_orig = image.img_to_array(img)  # ndarray: (224, 224, 3), float32
 x = np.expand_dims(x_orig, axis=0)  # ndarray: (1, 224, 224, 3), float32
@@ -23,19 +24,20 @@ for result in results:
     print(result)
 ranking = y_pred[0].argsort()[::-1]
 class_idx = ranking[0]
-値
 
 
-# 可視化のための関数の準備
+# 5. 可視化のための関数の準備
 def visualize_mono_map(map_array, base_image=None, output_path=None):
     if map_array.ndim == 3:
-        mono_map = np.sum(np.abs(map_array), axis=2)  # マップがカラーだった場合はモノクロに変換する。
+        mono_map = np.sum(np.abs(map_array), axis=2)  # マップがカラーだった場合はモノクロに変換する
     else:
         mono_map = map_array
 
-    minimum_value = mono_map.min()
+    # マップを正規化（上位・下位10%の画素は見やすさのため飽和させる）
+    minimum_value = np.percentile(mono_map, 10)
     maximum_value = np.percentile(mono_map, 90)
-    normalized_map = (np.minimum(mono_map, maximum_value) - minimum_value) / (maximum_value - minimum_value)  # マップを正規化する
+    normalized_map = (np.minimum(mono_map, maximum_value) - minimum_value) / (maximum_value - minimum_value)
+    normalized_map = np.maximum(normalized_map, 0.)
 
     if base_image is None:
         plt.imshow(normalized_map, cmap='jet')
@@ -63,9 +65,9 @@ import matplotlib.pyplot as plt
 class_output = model.output[:, class_idx]  # Tensor / クラススコア
 grad_tensor = K.gradients(class_output, model.input)[0]  # Tensor / クラススコアに対する入力の勾配
 grad_func = K.function([model.input], [grad_tensor])  # Function / 勾配の値を算出するための関数
-gradient = grad_func([x_processed])[0][0]  # ndarray: (224, 224, 3), float32 / 算出された勾配の
-visualize_mono_map(gradient, base_image=None, output_path="grad_images/naive_grad.png")
-visualize_mono_map(gradient, base_image=x_orig, output_path="grad_images/naive_grad_bg.png")
+gradient = grad_func([x_processed])[0][0]  # ndarray: (224, 224, 3), float32 / 算出された勾配の値
+visualize_mono_map(gradient, base_image=None, output_path="grad_images/{}_naive_grad.png".format(image_name))
+visualize_mono_map(gradient, base_image=x_orig, output_path="grad_images/{}_naive_grad_bg.png".format(image_name))
 
 
 # 6. SmoothGradで勾配を可視化
@@ -82,8 +84,8 @@ for i in range(n_samples):
 smooth_grad = total_gradient[0] / n_samples  # ndarray: (224, 224, 3), float32 / 勾配の合計値から平均の勾配を算出
 
 
-visualize_mono_map(smooth_grad, base_image=None, output_path="grad_images/smooth_grad.png")
-visualize_mono_map(smooth_grad, base_image=x_orig, output_path="grad_images/smooth_grad_bg.png")
+visualize_mono_map(smooth_grad, base_image=None, output_path="grad_images/{}_smooth_grad.png".format(image_name))
+visualize_mono_map(smooth_grad, base_image=x_orig, output_path="grad_images/{}_smooth_grad_bg.png".format(image_name))
 
 
 # 6. Guided Backpropで勾配を算出
@@ -127,8 +129,10 @@ with guided_graph.as_default():
 
     guided_feed_dict = {imported_x: x_processed}
     sample_gradient = guided_sess.run(guided_grads_node, feed_dict=guided_feed_dict)[0][0]
-    visualize_mono_map(sample_gradient, base_image=None, output_path="grad_images/guided_bp.png")
-    visualize_mono_map(sample_gradient, base_image=x_orig, output_path="grad_images/guided_bp_bg.png")
+    visualize_mono_map(sample_gradient, base_image=None,
+                       output_path="grad_images/{}_guided_bp.png".format(image_name))
+    visualize_mono_map(sample_gradient, base_image=x_orig,
+                       output_path="grad_images/{}_guided_bp_bg.png".format(image_name))
 
     n_samples = 100
     stdev_spread = 0.1
@@ -143,8 +147,10 @@ with guided_graph.as_default():
 
     guided_smooth_grad = total_gradient[0] / n_samples  # 平均の勾配を算出 / ndarray: (224, 224, 3), float32
 
-    visualize_mono_map(guided_smooth_grad, base_image=None, output_path="grad_images/guided_smooth_grad.png")
-    visualize_mono_map(guided_smooth_grad, base_image=x_orig, output_path="grad_images/guided_smooth_grad_bg.png")
+    visualize_mono_map(guided_smooth_grad, base_image=None,
+                       output_path="grad_images/{}_guided_smooth_grad.png".format(image_name))
+    visualize_mono_map(guided_smooth_grad, base_image=x_orig,
+                       output_path="grad_images/{}_guided_smooth_grad_bg.png".format(image_name))
 
 # 7. Grad CAMによる可視化
 import cv2
@@ -156,11 +162,9 @@ convout_val, grads_val = grad_func([x_processed])
 convout_val, grads_val = convout_val[0], grads_val[0]  # array: (14, 14, 512), float32 (両方とも）
 
 weights = np.mean(grads_val, axis=(0,1))  # チャネルの重み/array: (512,), float32
-cam = np.dot(convout_val, weights)  # 畳み込みの出力をチャネルで重みづけ/array, (14, 14), float32
-cam = np.maximum(cam, 0)
-cam = cv2.resize(cam, (224, 224), cv2.INTER_LINEAR)  # 上記をリサイズ
+grad_cam = np.dot(convout_val, weights)  # 畳み込みの出力をチャネルで重みづけ/array, (14, 14), float32
+grad_cam = np.maximum(grad_cam, 0)
+grad_cam = cv2.resize(grad_cam, (224, 224), cv2.INTER_LINEAR)  # 上記をリサイズ
 
-visualize_mono_map(cam, base_image=None, output_path="grad_images/grad_cam.png")
-visualize_mono_map(cam, base_image=x_orig, output_path="grad_images/grad_cam_bg.png")
-
-guided_grad_cam = np.stack([cam * smooth_grad[:,:,i] for i in range(3)], axis=2)
+visualize_mono_map(grad_cam, base_image=None, output_path="grad_images/{}_grad_cam.png".format(image_name))
+visualize_mono_map(grad_cam, base_image=x_orig, output_path="grad_images/{}_grad_cam_bg.png".format(image_name))
