@@ -9,15 +9,15 @@ from tensorflow.data import Dataset
 
 import time
 
-# tf.enable_eager_execution()
+tf.enable_eager_execution()
 
 # Parameters
-batch_size = 128
+batch_size = 32
 num_classes = 10
-epochs = 10
+epochs = 5
 img_rows, img_cols = 28, 28
-num_training = 60000  # 60000 for full
-num_test = 10000  # 10000 for full
+num_training = 32  # 60000 for full
+num_test = 10  # 10000 for full
 
 # Load Original Dataset
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
@@ -46,19 +46,20 @@ x_test /= 255
 dataset_train = Dataset.from_tensor_slices((x_train, y_train)).batch(batch_size).repeat()
 dataset_test = Dataset.from_tensor_slices((x_test, y_test)).batch(batch_size).repeat()
 
-
 def create_model():
     model = Sequential()
     model.add(Conv2D(32, kernel_size=(3, 3),
                      activation='relu',
-                     input_shape=input_shape))
-    model.add(Conv2D(64, (3, 3), activation='relu'))
+                     input_shape=input_shape,
+                     kernel_initializer='zero', bias_initializer='zero'
+                     ))
+    model.add(Conv2D(64, (3, 3), activation='relu',
+                     kernel_initializer='zero', bias_initializer='zero'
+                     ))
     model.add(MaxPooling2D(pool_size=(2, 2)))
-    model.add(Dropout(0.25))
     model.add(Flatten())
-    model.add(Dense(128, activation='relu'))
-    model.add(Dropout(0.5))
-    model.add(Dense(num_classes, activation='softmax'))
+    model.add(Dense(128, activation='relu', kernel_initializer='zero', bias_initializer='zero'))
+    model.add(Dense(num_classes, activation='softmax', kernel_initializer='zero', bias_initializer='zero'))
     return model
 
 
@@ -74,9 +75,18 @@ def print_dataset_separater():
     print("\n====Keras_with_tf.data====")
 
 
+class Logger(keras.callbacks.Callback):
+    def on_batch_end(self, batch, logs=None):
+        print(logs.get('loss'))
+        import ipdb
+        ipdb.set_trace()
+
+logger = Logger()
+
+
 print_eager_separater()
 eager_model = create_model()
-optimizer = tf.train.AdamOptimizer()
+optimizer = tf.train.GradientDescentOptimizer(0.1)
 steps_per_epoch = (len(x_train) - 1) // batch_size + 1
 validation_steps = (len(x_test) - 1) // batch_size + 1
 
@@ -88,13 +98,16 @@ for e in range(epochs):
         with tf.GradientTape() as tape:
             logits = eager_model(images, training=True)
             loss_value = tf.losses.softmax_cross_entropy(labels, logits)
-            grads = tape.gradient(loss_value, eager_model.variables)
-            optimizer.apply_gradients(zip(grads, eager_model.variables))
-            print('\rEpoch {}/{}: {}/{} Loss:{}'.format(e + 1,
-                                                        epochs,
-                                                        batch * batch_size,
-                                                        len(x_train),
-                                                        loss_value.numpy()), end="")
+        grads = tape.gradient(loss_value, eager_model.variables)
+        batch_grads = [4 * batch_size * item for item in grads]
+        optimizer.apply_gradients(zip(batch_grads, eager_model.variables))
+
+        print('\rEpoch {}/{}: {}/{} Loss:{}'.format(e + 1,
+                                                    epochs,
+                                                    batch * batch_size,
+                                                    len(x_train),
+                                                    loss_value.numpy()),
+                                                    end="")
 
         if (batch + 1) % steps_per_epoch == 0:
             avg_loss = tfe.metrics.Mean('loss', dtype=tf.float32)
@@ -138,15 +151,17 @@ print('Test accuracy:', data_score[1])
 print_keras_separater()
 keras_model = create_model()
 keras_model.compile(loss=keras.losses.categorical_crossentropy,
-              optimizer=optimizer,
-              metrics=['accuracy'])
+                    optimizer=optimizer,
+                    metrics=['accuracy'])
+
 
 start = time.time()
 keras_model.fit(x_train, y_train,
                 batch_size=batch_size,
                 epochs=epochs,
                 verbose=1,
-                validation_data=(x_test, y_test))
+                validation_data=(x_test, y_test)
+                )
 keras_elapsed_time = time.time() - start
 
 keras_score = keras_model.evaluate(x_test, y_test, verbose=0)
