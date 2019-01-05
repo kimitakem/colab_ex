@@ -20,8 +20,8 @@ train_x, val_x, train_y, val_y = model_selection.train_test_split(all_x, all_y, 
 from tensorflow import keras
 def get_model():
     model = tf.keras.Sequential([
-        tf.keras.layers.Dense(10, activation=tf.nn.relu, input_shape=(4,)),
-        tf.keras.layers.Dense(10, activation=tf.nn.relu),
+        tf.keras.layers.Dense(30, activation=tf.nn.relu, input_shape=(4,)),
+        tf.keras.layers.Dense(30, activation=tf.nn.relu),
         tf.keras.layers.Dense(3, activation=tf.nn.softmax)
     ])
     return model
@@ -59,8 +59,8 @@ val_dataset = Dataset.from_tensor_slices((val_x, val_y)).batch(batch_size)
 #############################################
 def get_model_wo_softmax():
     model = tf.keras.Sequential([
-        tf.keras.layers.Dense(10, activation=tf.nn.relu, input_shape=(4,)),
-        tf.keras.layers.Dense(10, activation=tf.nn.relu),
+        tf.keras.layers.Dense(30, activation=tf.nn.relu, input_shape=(4,)),
+        tf.keras.layers.Dense(30, activation=tf.nn.relu),
         tf.keras.layers.Dense(3)
     ])
     return model
