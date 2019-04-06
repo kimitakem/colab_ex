@@ -15,15 +15,18 @@ from matplotlib import pyplot as plt
 simple_log = []
 
 
-def rosen(x, alpha=1e2):
+def rosen_eval(x, alpha=1e2):
     """Rosenbrock test objective function"""
     x = [x] if isscalar(x[0]) else x  # scalar into list
     x = np.asarray(x)
     f = [sum(alpha * (x[:-1] ** 2 - x[1:]) ** 2 + (1. - x[:-1]) ** 2) for x in x]
-    return f if len(f) > 1 else f[0]  # 1-element-list into scalar
+    f_value = f if len(f) > 1 else f[0]  # 1-element-list into scalar
+    simple_log.append([x[0], f_value])
+    print(x, f_value)
+    return f_value
 
 
-def iris_evaluation(param):
+def iris_eval(param):
     svc_c = math.pow(10, param[0])
     svc_gamma = math.pow(10, param[1])
 
@@ -38,11 +41,25 @@ def iris_evaluation(param):
     return 1.0 - accuracy
 
 
-def objective(trial):
+def rosen_objective(trial):
+    param = [trial.suggest_uniform('x_0', -5, 5),
+             trial.suggest_uniform('x_1', -5, 5),
+             trial.suggest_uniform('x_2', -5, 5),
+             trial.suggest_uniform('x_3', -5, 5),
+             trial.suggest_uniform('x_4', -5, 5),
+             trial.suggest_uniform('x_5', -5, 5),
+             trial.suggest_uniform('x_6', -5, 5),
+             trial.suggest_uniform('x_7', -5, 5)
+             ]
+    score = rosen_eval(param)
+    return score
+
+
+def iris_objective(trial):
     param = [trial.suggest_uniform('log_svc_c', -5, 5),
              trial.suggest_uniform('log_svc_gamma', -5, 5)]
 
-    score = iris_evaluation(param)
+    score = iris_eval(param)
     return score
 
 
@@ -58,47 +75,80 @@ def plot_simple_log(history):
     plt.show()
 
 
-def tune_with_optuna():
+def tune_with_optuna(fc_name):
     global simple_log
     simple_log = []
     study = optuna.create_study()
-    study.optimize(objective, n_trials=100)
+
+    if fc_name is 'rosen':
+        study.optimize(rosen_objective, n_trials=100)
+    elif fc_name is 'iris':
+        study.optimize(iris_objective, n_trials=100)
+    else:
+        raise NotImplementedError
+
     print(study.best_trial)
     history = simple_log
     plot_simple_log(history)
     return history
 
 
-def tune_with_cmaes():
+def tune_with_cmaes(obj_name):
     global simple_log
     simple_log = []
-    es = cma.CMAEvolutionStrategy(2 * [0], 0.5)
+
+    if obj_name is "rosen":
+        param_dim = 8
+        obj_fc = rosen_eval
+        es = cma.CMAEvolutionStrategy(param_dim * [0], 0.5)
+    elif obj_name is "iris":
+        param_dim = 2
+        obj_fc = iris_eval
+        es = cma.CMAEvolutionStrategy(param_dim * [0], 0.5)
+    else:
+        raise NotImplementedError
+
     es.logger.disp_header()
-    es.optimize(iris_evaluation, iterations=20)  # ``objective_fct``: f(x: array_like) -> float
+    es.optimize(obj_fc, iterations=20)  # ``objective_fct``: f(x: array_like) -> float
     print(es.result_pretty())
     history = simple_log
     plot_simple_log(history)
     return history
 
-def tune_with_rbfopt():
+
+def tune_with_rbfopt(obj_name):
     global simple_log
     simple_log = []
     settings = rbfopt.RbfoptSettings(minlp_solver_path='\\Programs\\AMPL\\bonmin-win64\\bonmin.exe',
                                      nlp_solver_path='\\Programs\\AMPL\\ipopt-win64\\ipopt.exe',
-                                     max_evaluations=50)
-    bb = rbfopt.RbfoptUserBlackBox(2, np.array([-5] * 2), np.array([+5] * 2),
-                                   np.array(['R', 'R']), iris_evaluation)
+                                     max_evaluations=100)
+
+    if obj_name == 'rosen':
+        param_dim = 8
+        obj_fc = rosen_eval
+        bb = rbfopt.RbfoptUserBlackBox(param_dim, np.array([-5] * param_dim), np.array([5] * param_dim),
+                                       np.array(['R'] * param_dim), obj_fc)
+    elif obj_name == 'iris':
+        param_dim = 2
+        obj_fc = iris_eval
+        bb = rbfopt.RbfoptUserBlackBox(param_dim, np.array([-5] * param_dim), np.array([5] * param_dim),
+                                       np.array(['R'] * param_dim), obj_fc)
+    else:
+        raise NotImplementedError
+
     alg = rbfopt.RbfoptAlgorithm(settings, bb)
     val, x, itercount, evalcount, fast_evalcount = alg.optimize()
+
     history = simple_log
     plot_simple_log(history)
     return history
 
 
 if __name__ == '__main__':
-    rbfopt_hist = tune_with_rbfopt()
-    cma_es_hist = tune_with_cmaes()
-    optuna_hist = tune_with_optuna()
+    obj_name = 'rosen'
+    rbfopt_hist = tune_with_rbfopt(obj_name)
+    cma_es_hist = tune_with_cmaes(obj_name)
+    optuna_hist = tune_with_optuna(obj_name)
 
     value_rbfopt = [item[1] for item in rbfopt_hist]
     value_cma_es = [item[1] for item in cma_es_hist]
@@ -109,9 +159,10 @@ if __name__ == '__main__':
     optimal_optuna = [np.min(value_optuna[0:i+1]) for i in range(len(value_optuna))]
 
     plt.clf()
-    plt.plot(optimal_rbfopt)
-    plt.plot(optimal_cma_es)
-    plt.plot(optimal_optuna)
+    plt.plot(optimal_rbfopt, label="rbfopt")
+    plt.plot(optimal_cma_es, label="cma_es")
+    plt.plot(optimal_optuna, label="optuna")
+    plt.legend()
     ax = plt.gca()
     ax.set_yscale('log')
     plt.show()
