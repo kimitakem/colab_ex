@@ -8,6 +8,7 @@ import sklearn.svm
 
 import optuna
 import cma
+import rbfopt
 
 from matplotlib import pyplot as plt
 
@@ -79,18 +80,36 @@ def tune_with_cmaes():
     plot_simple_log(history)
     return history
 
+def tune_with_rbfopt():
+    global simple_log
+    simple_log = []
+    settings = rbfopt.RbfoptSettings(minlp_solver_path='\\Programs\\AMPL\\bonmin-win64\\bonmin.exe',
+                                     nlp_solver_path='\\Programs\\AMPL\\ipopt-win64\\ipopt.exe',
+                                     max_evaluations=50)
+    bb = rbfopt.RbfoptUserBlackBox(2, np.array([-5] * 2), np.array([+5] * 2),
+                                   np.array(['R', 'R']), iris_evaluation)
+    alg = rbfopt.RbfoptAlgorithm(settings, bb)
+    val, x, itercount, evalcount, fast_evalcount = alg.optimize()
+    history = simple_log
+    plot_simple_log(history)
+    return history
+
 
 if __name__ == '__main__':
+    rbfopt_hist = tune_with_rbfopt()
     cma_es_hist = tune_with_cmaes()
     optuna_hist = tune_with_optuna()
 
+    value_rbfopt = [item[1] for item in rbfopt_hist]
     value_cma_es = [item[1] for item in cma_es_hist]
     value_optuna = [item[1] for item in optuna_hist]
 
+    optimal_rbfopt = [np.min(value_rbfopt[0:i + 1]) for i in range(len(value_rbfopt))]
     optimal_cma_es = [np.min(value_cma_es[0:i+1]) for i in range(len(value_cma_es))]
     optimal_optuna = [np.min(value_optuna[0:i+1]) for i in range(len(value_optuna))]
 
     plt.clf()
+    plt.plot(optimal_rbfopt)
     plt.plot(optimal_cma_es)
     plt.plot(optimal_optuna)
     ax = plt.gca()
