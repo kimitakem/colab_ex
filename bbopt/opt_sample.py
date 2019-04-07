@@ -11,18 +11,43 @@ import cma
 import rbfopt
 
 from matplotlib import pyplot as plt
+import lightgbm as lgb
 
 simple_log = []
 
 
-def rosen_eval(x, alpha=1e2):
+
+
+def gbm_eval(param):
+    num_leaves = int(math.pow(10, param[0]))
+    learning_rate = math.pow(10, param[1])
+    data, target = sklearn.datasets.load_breast_cancer(return_X_y=True)
+    train_x, test_x, train_y, test_y = sklearn.model_selection.train_test_split(data, target, test_size=0.25)
+    dtrain = lgb.Dataset(train_x, label=train_y)
+    gbm_param = {'objective': 'binary',
+                 'metric': 'binary_logloss',
+                 'verbosity': -1,
+                 'boosting_type': 'gbdt',
+                 'num_leaves': num_leaves,
+                 'learning_rate': learning_rate
+    }
+    gbm = lgb.train(gbm_param, dtrain)
+    preds = gbm.predict(test_x)
+    pred_labels = np.rint(preds)
+    accuracy = sklearn.metrics.accuracy_score(test_y, pred_labels)
+    simple_log.append([param, 1.0 - accuracy])
+    print(param, 1.0 - accuracy)
+    return 1.0 - accuracy
+
+
+def rosen_eval(param, alpha=1e2):
     """Rosenbrock test objective function"""
-    x = [x] if isscalar(x[0]) else x  # scalar into list
+    x = [param] if isscalar(param[0]) else param  # scalar into list
     x = np.asarray(x)
     f = [sum(alpha * (x[:-1] ** 2 - x[1:]) ** 2 + (1. - x[:-1]) ** 2) for x in x]
     f_value = f if len(f) > 1 else f[0]  # 1-element-list into scalar
-    simple_log.append([x[0], f_value])
-    print(x, f_value)
+    simple_log.append([param, f_value])
+    print(param, f_value)
     return f_value
 
 
@@ -41,34 +66,12 @@ def iris_eval(param):
     return 1.0 - accuracy
 
 
-def rosen_objective(trial):
-    param = [trial.suggest_uniform('x_0', -5, 5),
-             trial.suggest_uniform('x_1', -5, 5),
-             trial.suggest_uniform('x_2', -5, 5),
-             trial.suggest_uniform('x_3', -5, 5),
-             trial.suggest_uniform('x_4', -5, 5),
-             trial.suggest_uniform('x_5', -5, 5),
-             trial.suggest_uniform('x_6', -5, 5),
-             trial.suggest_uniform('x_7', -5, 5)
-             ]
-    score = rosen_eval(param)
-    return score
-
-
-def iris_objective(trial):
-    param = [trial.suggest_uniform('log_svc_c', -5, 5),
-             trial.suggest_uniform('log_svc_gamma', -5, 5)]
-
-    score = iris_eval(param)
-    return score
-
-
 def plot_simple_log(history):
     p0 = [item[0][0] for item in history]
     p1 = [item[0][1] for item in history]
     value = [item[1] for item in history]
-    plt.xlim(-5, 5)
-    plt.ylim(-5, 5)
+    #plt.xlim(-5, 5)
+    #plt.ylim(-5, 5)
     plt.scatter(p0, p1, s=10, c=value, cmap='jet')
     plt.colorbar()
 
@@ -80,10 +83,38 @@ def tune_with_optuna(fc_name):
     simple_log = []
     study = optuna.create_study()
 
+    def rosen_objective(trial):
+        param = [trial.suggest_uniform('x_0', -5, 5),
+                 trial.suggest_uniform('x_1', -5, 5),
+                 trial.suggest_uniform('x_2', -5, 5),
+                 trial.suggest_uniform('x_3', -5, 5),
+                 trial.suggest_uniform('x_4', -5, 5),
+                 trial.suggest_uniform('x_5', -5, 5),
+                 trial.suggest_uniform('x_6', -5, 5),
+                 trial.suggest_uniform('x_7', -5, 5)
+                 ]
+        score = rosen_eval(param)
+        return score
+
+    def iris_objective(trial):
+        param = [trial.suggest_uniform('log_svc_c', -5, 5),
+                 trial.suggest_uniform('log_svc_gamma', -5, 5)]
+
+        score = iris_eval(param)
+        return score
+
+    def lgb_objective(trial):
+        param = [trial.suggest_uniform('log_num_leaves', 1, 3),
+                 trial.suggest_uniform('log_learning_rate', -8, 0)
+                 ]
+        return gbm_eval(param)
+
     if fc_name is 'rosen':
         study.optimize(rosen_objective, n_trials=100)
     elif fc_name is 'iris':
         study.optimize(iris_objective, n_trials=100)
+    elif fc_name is 'gbm':
+        study.optimize(lgb_objective, n_trials=100)
     else:
         raise NotImplementedError
 
@@ -105,6 +136,9 @@ def tune_with_cmaes(obj_name):
         param_dim = 2
         obj_fc = iris_eval
         es = cma.CMAEvolutionStrategy(param_dim * [0], 0.5)
+    elif obj_name is "gbm":
+        obj_fc = gbm_eval
+        es = cma.CMAEvolutionStrategy([2, -4], 0.5)
     else:
         raise NotImplementedError
 
@@ -133,6 +167,12 @@ def tune_with_rbfopt(obj_name):
         obj_fc = iris_eval
         bb = rbfopt.RbfoptUserBlackBox(param_dim, np.array([-5] * param_dim), np.array([5] * param_dim),
                                        np.array(['R'] * param_dim), obj_fc)
+    elif obj_name == 'gbm':
+        bb = rbfopt.RbfoptUserBlackBox(dimension=2,
+                                       var_lower=np.array([1, -8]),
+                                       var_upper=np.array([3, 0]),
+                                       var_type=np.array(['R', 'R']),
+                                       obj_funct=gbm_eval)
     else:
         raise NotImplementedError
 
@@ -145,7 +185,7 @@ def tune_with_rbfopt(obj_name):
 
 
 if __name__ == '__main__':
-    obj_name = 'rosen'
+    obj_name = 'gbm'
     rbfopt_hist = tune_with_rbfopt(obj_name)
     cma_es_hist = tune_with_cmaes(obj_name)
     optuna_hist = tune_with_optuna(obj_name)
