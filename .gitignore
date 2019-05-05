@@ -4,5 +4,5 @@ model
 grad_images
 images
 reference
-.pkl
-.dat
+*.pkl
+*.dat
